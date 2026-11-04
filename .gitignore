@@ -22,3 +22,5 @@ data/*.parquet
 .vscode/
 .idea/
 EOF
+
+s3-config.json

@@ -1,0 +1,23 @@
+services:
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: football-seaweedfs
+    environment:
+      WEED_JWT_FILER_SIGNING_KEY: football_local_jwt_signing_key_2026
+    ports:
+      - "8333:8333"
+      - "9333:9333"
+    volumes:
+      - seaweedfs_data:/data
+      - ./s3-config.json:/etc/seaweedfs/s3-config.json:ro
+    command: >
+      server
+      -s3
+      -dir=/data
+      -s3.port=8333
+      -master.port=9333
+      -s3.config=/etc/seaweedfs/s3-config.json
+    restart: unless-stopped
+
+volumes:
+  seaweedfs_data:

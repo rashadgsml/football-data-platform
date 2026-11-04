@@ -6,11 +6,14 @@ from urllib.request import urlopen
 
 from football_platform.checksums import calculate_sha256
 from football_platform.manifest import load_manifest, save_manifest
+from football_platform.storage import S3Storage
 
 BASE_URL = (
     "https://raw.githubusercontent.com/"
     "statsbomb/open-data/master/data/events"
 )
+
+S3_PREFIX = "statsbomb/events"
 
 
 def fetch_match_events(match_id: int) -> bytes:
@@ -32,15 +35,8 @@ def fetch_match_events(match_id: int) -> bytes:
     return content
 
 
-def save_raw_events(
-    match_id: int,
-    content: bytes,
-    output_dir: Path,
-) -> dict:
-    """Validate and atomically save original match events."""
-
-    if match_id <= 0:
-        raise ValueError("Match ID must be a positive integer.")
+def validate_events(content: bytes) -> list:
+    """Validate that content contains a JSON array of events."""
 
     try:
         events = json.loads(content)
@@ -49,6 +45,21 @@ def save_raw_events(
 
     if not isinstance(events, list):
         raise TypeError("Expected a JSON array of match events.")
+
+    return events
+
+
+def save_raw_events(
+    match_id: int,
+    content: bytes,
+    output_dir: Path,
+) -> dict:
+    """Validate and atomically save original match events locally."""
+
+    if match_id <= 0:
+        raise ValueError("Match ID must be a positive integer.")
+
+    events = validate_events(content)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -73,8 +84,9 @@ def ingest_match(
     match_id: int,
     output_dir: Path,
     manifest_path: Path | None = None,
+    storage: S3Storage | None = None,
 ) -> dict:
-    """Download or reuse match events and record ingestion metadata."""
+    """Ingest one match locally and optionally upload it to S3."""
 
     if match_id <= 0:
         raise ValueError("Match ID must be a positive integer.")
@@ -88,10 +100,7 @@ def ingest_match(
     if file_path.exists():
         try:
             content = file_path.read_bytes()
-            events = json.loads(content)
-
-            if not isinstance(events, list):
-                raise TypeError("Existing file is not a JSON array.")
+            events = validate_events(content)
 
             result = {
                 "match_id": match_id,
@@ -101,14 +110,24 @@ def ingest_match(
             }
             skipped = True
 
-        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        except ValueError:
             content = fetch_match_events(match_id)
             result = save_raw_events(match_id, content, output_dir)
     else:
         content = fetch_match_events(match_id)
         result = save_raw_events(match_id, content, output_dir)
 
+    if storage is not None:
+        storage.create_bucket()
+
+        object_key = f"{S3_PREFIX}/{match_id}.json"
+        storage.upload_bytes(object_key, content)
+
+        result["s3_key"] = object_key
+        result["s3_uri"] = f"s3://{storage.bucket}/{object_key}"
+
     manifest = load_manifest(manifest_path)
+
     existing_entry = next(
         (entry for entry in manifest if entry.get("match_id") == match_id),
         None,
@@ -121,6 +140,7 @@ def ingest_match(
             "source_url": f"{BASE_URL}/{match_id}.json",
             "retrieved_at": datetime.now(UTC).isoformat(),
         }
+
         save_manifest(manifest_entry, manifest_path)
 
     result["skipped"] = skipped
@@ -131,6 +151,7 @@ def ingest_matches(
     match_ids: list[int],
     output_dir: Path,
     manifest_path: Path | None = None,
+    storage: S3Storage | None = None,
 ) -> list[dict]:
     """Ingest multiple matches sequentially."""
 
@@ -138,6 +159,6 @@ def ingest_matches(
         raise ValueError("Match IDs must be unique.")
 
     return [
-        ingest_match(match_id, output_dir, manifest_path)
+        ingest_match(match_id, output_dir, manifest_path, storage)
         for match_id in match_ids
     ]

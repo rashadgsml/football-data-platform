@@ -133,7 +133,16 @@ def ingest_match(
         None,
     )
 
-    if existing_entry is None or not skipped:
+    needs_manifest_update = (
+        existing_entry is None
+        or not skipped
+        or (
+            storage is not None
+            and existing_entry.get("s3_key") != result.get("s3_key")
+        )
+    )
+
+    if needs_manifest_update:
         manifest_entry = {
             **result,
             "source": "StatsBomb Open Data",

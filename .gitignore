@@ -1,4 +1,3 @@
-cat > .gitignore <<'EOF'
 # Python
 __pycache__/
 *.py[cod]
@@ -6,13 +5,23 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.tmp
 
-# Virtual environments and secrets
+# Virtual environments
 .venv/
-.env
 
-# Local data — never commit downloaded datasets
+# Secrets and local configuration - never commit
+.env
+.env.*
+!.env.example
+s3-config.json
+*.pem
+*.key
+
+# Local data - never commit downloaded or generated datasets
 data/raw/
+data/silver/
+data/gold/
 data/processed/
 data/*.json
 data/*.parquet
@@ -21,6 +30,3 @@ data/*.parquet
 .DS_Store
 .vscode/
 .idea/
-EOF
-
-s3-config.json

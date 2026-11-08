@@ -1,3 +1,12 @@
+"""Manual smoke test for the configured S3-compatible storage.
+
+Writes, reads back and lists a small object under the ``test/`` prefix of the
+bucket named in ``.env``. This is not a pytest test and never runs on import.
+
+Usage:
+    python scripts/s3_smoke_test.py
+"""
+
 from football_platform.storage import S3Storage
 
 

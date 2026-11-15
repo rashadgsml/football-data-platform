@@ -1,6 +1,7 @@
 services:
   seaweedfs:
-    image: chrislusf/seaweedfs:latest
+    # Pinned so a pull cannot silently change the storage server. Upgrade deliberately.
+    image: chrislusf/seaweedfs:4.50
     container_name: football-seaweedfs
     environment:
       # Required. Set in .env (see .env.example); never commit a value.

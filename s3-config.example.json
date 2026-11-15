@@ -9,11 +9,9 @@
         }
       ],
       "actions": [
-        "Admin",
         "Read",
         "Write",
-        "List",
-        "Tagging"
+        "List"
       ]
     }
   ]

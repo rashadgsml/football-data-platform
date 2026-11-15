@@ -21,12 +21,22 @@ attribution requirements apply.
 
 ### Bronze (implemented)
 
-- Downloads original StatsBomb event JSON for a match and validates that it is a JSON array.
-- Saves it atomically to `data/raw/statsbomb/events/<match_id>.json`.
-- Uploads it unchanged to S3-compatible storage at `statsbomb/events/<match_id>.json`.
-- Records source URL, SHA-256 checksum, event count, S3 location and retrieval time in a
-  local `manifest.json`, with one entry per match.
-- Skips the download when a valid local file already exists.
+- Downloads original StatsBomb event JSON for a match, retrying transient network errors and
+  HTTP 5xx responses (3 attempts, exponential backoff).
+- Validates it: a non-empty JSON array of objects, each with the essential event fields
+  (`id`, `index`, `period`, `timestamp`, `minute`, `second`, `type`, `possession`, `team`).
+  Optional fields such as `location` and `player` may be absent or null.
+- Saves it unchanged and atomically to `data/raw/statsbomb/events/<match_id>.json`. A valid local
+  file that matches its recorded SHA-256 is reused; anything else is downloaded again.
+- Uploads it to S3-compatible storage at `statsbomb/events/<match_id>.json` only when the object
+  is missing or its SHA-256 differs, then downloads it again to verify the checksum. ETags are
+  never used for comparison.
+- Records one manifest object per match in S3 at `statsbomb/manifests/events/<match_id>.json`,
+  and mirrors it in a local `manifest.json` for development (writes are file-locked). Both
+  manifests are validated before anything is written.
+- Manifest timestamps: `retrieved_at` is when the file was last downloaded from the source, and
+  `s3_uploaded_at` is when it was last uploaded to S3. Neither changes when an existing file or
+  object is only checked.
 
 Five Bundesliga 2023/24 matches are ingested by `scripts/ingest_sample_matches.py`.
 
@@ -49,6 +59,20 @@ Secrets are never committed. Create your own local files from the templates:
 
 `.env` and `s3-config.json` are ignored by Git. Docker Compose reads
 `WEED_JWT_FILER_SIGNING_KEY` from `.env` and refuses to start without it.
+
+The S3 identity has only `Read`, `Write` and `List`. If the bucket does not exist yet,
+`create_bucket()` may need `Admin`; create the bucket once with an admin identity instead of
+granting it to the ingestion identity.
+
+#### Rotating credentials
+
+1. Generate new values: `openssl rand -hex 16` (access key), `openssl rand -hex 32` (secret key
+   and JWT signing key).
+2. Update `.env` and `s3-config.json` (same access and secret key in both).
+3. Restart: `docker compose down && docker compose up -d`.
+4. Run `python scripts/s3_smoke_test.py` to confirm the new keys work.
+
+Rotating invalidates old keys, including any that remain in Git history.
 
 ### Start storage
 

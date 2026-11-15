@@ -21,22 +21,33 @@ attribution requirements apply.
 
 ### Bronze (implemented)
 
-- Downloads original StatsBomb event JSON for a match, retrying transient network errors and
-  HTTP 5xx responses (3 attempts, exponential backoff).
-- Validates it: a non-empty JSON array of objects, each with the essential event fields
+- **Pinned source.** A run resolves StatsBomb's `master` branch to a commit SHA once (one
+  GitHub API call, only if a download is needed) and downloads every file from that commit, so
+  the bytes can be traced to an exact upstream version. Transient network errors and HTTP 5xx
+  are retried (3 attempts, exponential backoff); 4xx errors fail immediately.
+- Validates each file: a non-empty JSON array of objects, each with the essential event fields
   (`id`, `index`, `period`, `timestamp`, `minute`, `second`, `type`, `possession`, `team`).
   Optional fields such as `location` and `player` may be absent or null.
-- Saves it unchanged and atomically to `data/raw/statsbomb/events/<match_id>.json`. A valid local
-  file that matches its recorded SHA-256 is reused; anything else is downloaded again.
-- Uploads it to S3-compatible storage at `statsbomb/events/<match_id>.json` only when the object
-  is missing or its SHA-256 differs, then downloads it again to verify the checksum. ETags are
-  never used for comparison.
-- Records one manifest object per match in S3 at `statsbomb/manifests/events/<match_id>.json`,
-  and mirrors it in a local `manifest.json` for development (writes are file-locked). Both
-  manifests are validated before anything is written.
-- Manifest timestamps: `retrieved_at` is when the file was last downloaded from the source, and
-  `s3_uploaded_at` is when it was last uploaded to S3. Neither changes when an existing file or
-  object is only checked.
+- Saves it unchanged and atomically to `data/raw/statsbomb/events/<match_id>.json`, a local
+  cache of the current version. A valid file that matches its recorded SHA-256 is reused with no
+  network access; `--refresh` forces a new download.
+- **Immutable versions in S3.** Each version is stored at the write-once key
+  `statsbomb/events/<match_id>/<sha256>.json` and uploaded only if missing or different, then
+  downloaded again to verify the checksum (ETags are never used). If upstream content changes,
+  the new bytes get a new key and the old object stays; nothing is overwritten or deleted.
+- **Manifest per match** at `statsbomb/manifests/events/<match_id>.json`, mirrored in a local
+  `manifest.json` for development (file-locked). It holds the current version
+  (`sha256`, `s3_key`, `source_commit`, `source_url`) and a `history` of superseded versions.
+  `source_commit` is `null` for data ingested before commits were tracked: unknown, not guessed.
+- Timestamps: `retrieved_at` is the last download from the source and `s3_uploaded_at` the last
+  upload to S3. Neither changes when an existing file or object is only checked.
+- **Run record** at `statsbomb/runs/<run_id>.json` (S3 runs only): source commit, per-match
+  status (`downloaded` / `cached`), and, for a failed run, the failing match and error. A failure
+  still stops the batch and is re-raised.
+
+Limitations: the local cache holds only the current version (older versions live in S3); legacy
+objects at `statsbomb/events/<match_id>.json` are left in place after migration and can be
+deleted manually once you are sure they are no longer needed.
 
 Five Bundesliga 2023/24 matches are ingested by `scripts/ingest_sample_matches.py`.
 
@@ -88,6 +99,7 @@ Both are reachable from the local machine only.
 ```bash
 python scripts/s3_smoke_test.py          # check the S3 connection (writes under test/)
 python scripts/ingest_sample_matches.py  # ingest the five sample matches
+python scripts/ingest_sample_matches.py --refresh  # re-download and record changes
 ```
 
 ## Development

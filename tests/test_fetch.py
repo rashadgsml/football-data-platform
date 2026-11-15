@@ -4,7 +4,7 @@ from urllib.error import HTTPError, URLError
 import pytest
 from factories import COMMIT
 
-from football_platform.ingestion import fetch_match_events
+from football_platform.datasets.events import fetch_match_events
 
 URLOPEN = "football_platform.source.urlopen"
 

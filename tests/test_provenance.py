@@ -6,10 +6,11 @@ import pytest
 from factories import COMMIT, OTHER_COMMIT, FakeStorage, events_bytes
 
 from football_platform.checksums import calculate_sha256
-from football_platform.ingestion import ingest_match, ingest_matches
+from football_platform.datasets.events import ingest_match
 from football_platform.manifest import parse_entry
+from football_platform.pipeline import ingest_matches
 
-FETCH = "football_platform.ingestion.fetch_match_events"
+FETCH = "football_platform.datasets.events.fetch_match_events"
 MANIFEST_KEY = "statsbomb/manifests/events/3895158.json"
 
 

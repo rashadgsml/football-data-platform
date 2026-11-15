@@ -5,9 +5,9 @@ import pytest
 from factories import FakeStorage, events_bytes
 
 from football_platform.checksums import calculate_sha256
-from football_platform.ingestion import ingest_match, save_raw_events
+from football_platform.datasets.events import ingest_match, save_raw_events
 
-FETCH = "football_platform.ingestion.fetch_match_events"
+FETCH = "football_platform.datasets.events.fetch_match_events"
 
 
 def key_for(content: bytes, match_id: int = 3895158) -> str:
@@ -45,7 +45,7 @@ def clock(monkeypatch):
         def set(self, value):
             Clock.now = value
 
-    monkeypatch.setattr("football_platform.ingestion.utc_now", lambda: Clock.now)
+    monkeypatch.setattr("football_platform.bronze.utc_now", lambda: Clock.now)
     return Clock()
 
 

@@ -16,7 +16,7 @@ Usage:
 import argparse
 from pathlib import Path
 
-from football_platform.ingestion import ingest_matches
+from football_platform.pipeline import ingest_matches
 from football_platform.runs import new_run_id
 from football_platform.storage import S3Storage
 

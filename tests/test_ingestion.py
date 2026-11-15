@@ -6,13 +6,10 @@ from unittest.mock import patch
 import pytest
 from factories import COMMIT, events_bytes, make_events
 
-from football_platform.ingestion import (
-    ingest_match,
-    ingest_matches,
-    save_raw_events,
-)
+from football_platform.datasets.events import ingest_match, save_raw_events
+from football_platform.pipeline import ingest_matches
 
-FETCH = "football_platform.ingestion.fetch_match_events"
+FETCH = "football_platform.datasets.events.fetch_match_events"
 
 
 def test_save_raw_events(tmp_path):
@@ -188,7 +185,7 @@ def test_ingest_match_rejects_empty_upstream_response(tmp_path):
 def test_retrieved_at_is_preserved_when_nothing_is_downloaded(tmp_path, monkeypatch):
     manifest_path = tmp_path / "manifest.json"
     times = iter(["2026-01-01T00:00:00+00:00", "2026-02-02T00:00:00+00:00"])
-    monkeypatch.setattr("football_platform.ingestion.utc_now", lambda: next(times))
+    monkeypatch.setattr("football_platform.bronze.utc_now", lambda: next(times))
 
     with patch(FETCH, return_value=events_bytes(1)) as mock_fetch:
         ingest_match(3895158, tmp_path / "events", manifest_path)
@@ -219,7 +216,7 @@ def test_retrieved_at_is_updated_when_a_new_download_happens(tmp_path, monkeypat
     manifest_path = tmp_path / "manifest.json"
     events_dir = tmp_path / "events"
     times = iter(["2026-01-01T00:00:00+00:00", "2026-02-02T00:00:00+00:00"])
-    monkeypatch.setattr("football_platform.ingestion.utc_now", lambda: next(times))
+    monkeypatch.setattr("football_platform.bronze.utc_now", lambda: next(times))
 
     with patch(FETCH, return_value=events_bytes(1)):
         ingest_match(3895158, events_dir, manifest_path)

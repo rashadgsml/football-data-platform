@@ -5,7 +5,7 @@ import pytest
 from factories import COMMIT
 
 from football_platform import source
-from football_platform.ingestion import fetch_match_events
+from football_platform.datasets.events import fetch_match_events
 from football_platform.source import SourceRef, events_url
 
 URLOPEN = "football_platform.source.urlopen"

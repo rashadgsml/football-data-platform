@@ -115,7 +115,9 @@ The tests in `tests/` run offline. They mock the network and S3 and never touch 
 ## Repository layout
 
 ```
-src/football_platform/   ingestion, manifest, storage, config, checksums
+src/football_platform/   bronze (shared ingestion mechanics), pipeline (runs), source (pinned
+                         upstream access), manifest, runs, storage, config, checksums
+src/football_platform/datasets/   explicit per-dataset rules (events today)
 scripts/                 manual scripts (sample ingestion, S3 smoke test)
 tests/                   offline pytest suite
 docker-compose.yml       local SeaweedFS

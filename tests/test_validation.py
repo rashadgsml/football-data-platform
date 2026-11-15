@@ -3,7 +3,7 @@ import json
 import pytest
 from factories import make_event, make_events
 
-from football_platform.ingestion import validate_events
+from football_platform.datasets.events import validate_events
 
 
 def encode(value) -> bytes:

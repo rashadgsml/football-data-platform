@@ -38,11 +38,28 @@ def load_manifest(manifest_path: Path) -> list[dict]:
     return manifest
 
 
-def find_entry(manifest: list[dict], match_id: int) -> dict | None:
-    """Return the entry for a match, or None."""
+def entry_unit(entry: dict) -> str | None:
+    """Identify what an entry describes within its dataset.
+
+    New datasets store an explicit ``unit`` (for example ``"9/281"`` for the
+    matches of one competition season). Event entries predate that field and are
+    identified by ``match_id``; they stay valid unchanged.
+    """
+
+    if "unit" in entry:
+        return str(entry["unit"])
+
+    if "match_id" in entry:
+        return str(entry["match_id"])
+
+    return None
+
+
+def find_entry(manifest: list[dict], unit: int | str) -> dict | None:
+    """Return the entry for a unit (a match id for events), or None."""
 
     return next(
-        (entry for entry in manifest if entry.get("match_id") == match_id),
+        (entry for entry in manifest if entry_unit(entry) == str(unit)),
         None,
     )
 
@@ -64,7 +81,7 @@ def save_manifest(entry: dict, manifest_path: Path) -> None:
         manifest = [
             existing
             for existing in load_manifest(manifest_path)
-            if existing.get("match_id") != entry.get("match_id")
+            if entry_unit(existing) != entry_unit(entry)
         ]
         manifest.append(entry)
 
@@ -88,33 +105,35 @@ def serialize_entry(entry: dict) -> bytes:
     return json.dumps(entry, indent=2, sort_keys=True).encode("utf-8")
 
 
-def parse_entry(content: bytes, match_id: int) -> dict:
-    """Parse and validate a per-match manifest object."""
+def parse_entry(content: bytes, unit: int | str, label: str | None = None) -> dict:
+    """Parse and validate a per-object manifest stored in object storage.
+
+    ``label`` names the object in error messages; it defaults to a match.
+    """
+
+    label = label or f"match {unit}"
 
     try:
         entry = json.loads(content)
     except (json.JSONDecodeError, UnicodeDecodeError) as error:
-        raise ValueError(
-            f"Manifest for match {match_id} contains invalid JSON."
-        ) from error
+        raise ValueError(f"Manifest for {label} contains invalid JSON.") from error
 
     if not isinstance(entry, dict):
-        raise TypeError(f"Manifest for match {match_id} must be a JSON object.")
+        raise TypeError(f"Manifest for {label} must be a JSON object.")
 
-    if entry.get("match_id") != match_id:
+    if entry_unit(entry) != str(unit):
         raise ValueError(
-            f"Manifest for match {match_id} has a different match_id: "
-            f"{entry.get('match_id')!r}."
+            f"Manifest for {label} describes a different object: {entry_unit(entry)!r}."
         )
 
     sha256 = entry.get("sha256")
     if not isinstance(sha256, str) or len(sha256) != 64:
-        raise ValueError(f"Manifest for match {match_id} has an invalid sha256.")
+        raise ValueError(f"Manifest for {label} has an invalid sha256.")
 
     # Optional: entries written before commit tracking lack these fields.
     source_commit = entry.get("source_commit")
     if source_commit is not None and not is_commit_sha(source_commit):
-        raise ValueError(f"Manifest for match {match_id} has an invalid source_commit.")
+        raise ValueError(f"Manifest for {label} has an invalid source_commit.")
 
     history = entry.get("history", [])
     if not isinstance(history, list) or not all(
@@ -123,6 +142,6 @@ def parse_entry(content: bytes, match_id: int) -> dict:
         and len(version["sha256"]) == 64
         for version in history
     ):
-        raise ValueError(f"Manifest for match {match_id} has an invalid history.")
+        raise ValueError(f"Manifest for {label} has an invalid history.")
 
     return entry

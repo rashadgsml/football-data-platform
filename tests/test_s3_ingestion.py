@@ -8,7 +8,14 @@ from football_platform.checksums import calculate_sha256
 from football_platform.ingestion import ingest_match, save_raw_events
 
 FETCH = "football_platform.ingestion.fetch_match_events"
-EVENT_KEY = "statsbomb/events/3895158.json"
+
+
+def key_for(content: bytes, match_id: int = 3895158) -> str:
+    """Write-once, content-addressed S3 key for one version of a match."""
+
+    return f"statsbomb/events/{match_id}/{calculate_sha256(content)}.json"
+
+
 MANIFEST_KEY = "statsbomb/manifests/events/3895158.json"
 
 
@@ -20,7 +27,7 @@ def upstream(monkeypatch):
         content = events_bytes(1)
         downloads = 0
 
-    def fetch(match_id):
+    def fetch(match_id, commit):
         Upstream.downloads += 1
         return Upstream.content
 
@@ -56,13 +63,14 @@ def test_ingest_match_uploads_events_to_s3(tmp_path: Path, upstream) -> None:
     )
 
     assert storage.create_bucket_calls == 1
-    assert storage.uploads.count(EVENT_KEY) == 1
-    assert storage.objects[EVENT_KEY] == upstream.content
+    key = key_for(upstream.content)
+    assert storage.uploads.count(key) == 1
+    assert storage.objects[key] == upstream.content
 
     assert result["match_id"] == 3895158
     assert result["event_count"] == 1
-    assert result["s3_key"] == "statsbomb/events/3895158.json"
-    assert result["s3_uri"] == ("s3://football-raw/statsbomb/events/3895158.json")
+    assert result["s3_key"] == key
+    assert result["s3_uri"] == f"s3://football-raw/{key}"
     assert result["s3_uploaded"] is True
 
 
@@ -89,17 +97,17 @@ def test_local_file_is_skipped_but_still_uploaded_when_missing_from_s3(tmp_path)
 
     assert result["skipped"] is True
     assert result["s3_uploaded"] is True
-    assert storage.objects[EVENT_KEY] == content
+    assert storage.objects[key_for(content)] == content
 
 
 def test_different_s3_object_is_replaced(tmp_path, upstream):
     storage = FakeStorage()
-    storage.objects[EVENT_KEY] = b"stale content"
+    storage.objects[key_for(upstream.content)] = b"stale content"
 
     result = ingest_match(3895158, tmp_path, storage=storage)
 
     assert result["s3_uploaded"] is True
-    assert storage.objects[EVENT_KEY] == upstream.content
+    assert storage.objects[key_for(upstream.content)] == upstream.content
 
 
 def test_comparison_uses_sha256_of_content_not_etag(tmp_path, upstream):
@@ -107,12 +115,12 @@ def test_comparison_uses_sha256_of_content_not_etag(tmp_path, upstream):
 
     storage = FakeStorage()
     same_length = bytes(len(upstream.content))
-    storage.objects[EVENT_KEY] = same_length
+    storage.objects[key_for(upstream.content)] = same_length
 
     result = ingest_match(3895158, tmp_path, storage=storage)
 
     assert result["s3_uploaded"] is True
-    assert calculate_sha256(storage.objects[EVENT_KEY]) == result["sha256"]
+    assert calculate_sha256(storage.objects[key_for(upstream.content)]) == result["sha256"]
 
 
 def test_upload_is_verified_and_a_mismatch_fails_loudly(tmp_path, upstream):
@@ -129,13 +137,13 @@ def test_upload_is_verified_and_a_mismatch_fails_loudly(tmp_path, upstream):
 def test_tampered_local_file_does_not_overwrite_s3(tmp_path, upstream):
     storage = FakeStorage()
     ingest_match(3895158, tmp_path, storage=storage)
-    original = storage.objects[EVENT_KEY]
+    original = upstream.content
 
     (tmp_path / "3895158.json").write_bytes(events_bytes(1, label="tampered-"))
 
     ingest_match(3895158, tmp_path, storage=storage)
 
-    assert storage.objects[EVENT_KEY] == original
+    assert storage.objects[key_for(original)] == original
     assert (tmp_path / "3895158.json").read_bytes() == original
 
 
@@ -152,7 +160,7 @@ def test_one_manifest_object_is_written_per_match(tmp_path, upstream, clock):
     ]
     assert manifest["match_id"] == 3895158
     assert manifest["sha256"] == calculate_sha256(upstream.content)
-    assert manifest["s3_key"] == EVENT_KEY
+    assert manifest["s3_key"] == key_for(upstream.content)
     assert manifest["source"] == "StatsBomb Open Data"
 
 
@@ -162,7 +170,7 @@ def test_manifests_do_not_live_under_the_events_prefix(tmp_path, upstream):
     ingest_match(3895158, tmp_path, storage=storage)
 
     event_objects = [k for k in storage.objects if k.startswith("statsbomb/events/")]
-    assert event_objects == [EVENT_KEY]
+    assert event_objects == [key_for(upstream.content)]
 
 
 def test_first_ingest_records_matching_download_and_upload_times(tmp_path, upstream, clock):
@@ -209,13 +217,13 @@ def test_existing_object_without_recorded_upload_time_keeps_it_unknown(tmp_path,
 
     ingest_match(3895158, tmp_path)
     storage = FakeStorage()
-    storage.objects[EVENT_KEY] = upstream.content
+    storage.objects[key_for(upstream.content)] = upstream.content
 
     clock.set("T2")
     result = ingest_match(3895158, tmp_path, storage=storage)
 
     assert result["s3_uploaded"] is False
-    assert EVENT_KEY not in storage.uploads
+    assert key_for(upstream.content) not in storage.uploads
     assert stored_manifest(storage)["s3_uploaded_at"] is None
     assert stored_manifest(storage)["retrieved_at"] == "T1"
 
@@ -228,7 +236,7 @@ def test_run_without_s3_keeps_previously_recorded_s3_fields(tmp_path, upstream, 
     ingest_match(3895158, tmp_path)  # no storage
 
     entry = json.loads((tmp_path / "manifest.json").read_text())[0]
-    assert entry["s3_key"] == EVENT_KEY
+    assert entry["s3_key"] == key_for(upstream.content)
     assert entry["s3_uploaded_at"] == "T1"
 
 
@@ -236,7 +244,7 @@ def test_invalid_s3_manifest_stops_ingestion_before_any_write(tmp_path, monkeypa
     storage = FakeStorage()
     storage.objects[MANIFEST_KEY] = b"not json"
 
-    def fail(match_id):
+    def fail(*args):
         raise AssertionError("must not download")
 
     monkeypatch.setattr(FETCH, fail)

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
-from factories import events_bytes, make_events
+from factories import COMMIT, events_bytes, make_events
 
 from football_platform.ingestion import (
     ingest_match,
@@ -79,7 +79,7 @@ def test_ingest_match_replaces_corrupted_file(tmp_path):
     with patch(FETCH, return_value=new_content) as mock_fetch:
         result = ingest_match(3895158, tmp_path)
 
-    mock_fetch.assert_called_once_with(3895158)
+    mock_fetch.assert_called_once_with(3895158, COMMIT)
     assert result["skipped"] is False
     assert json.loads(file_path.read_bytes())[0]["id"] == "event-new-1"
 
@@ -96,7 +96,7 @@ def test_ingest_match_redownloads_invalid_cached_data(tmp_path, cached):
     with patch(FETCH, return_value=fresh) as mock_fetch:
         result = ingest_match(3895158, tmp_path)
 
-    mock_fetch.assert_called_once_with(3895158)
+    mock_fetch.assert_called_once_with(3895158, COMMIT)
     assert result["skipped"] is False
     assert file_path.read_bytes() == fresh
 
@@ -247,7 +247,7 @@ def test_cached_file_that_differs_from_recorded_checksum_is_redownloaded(tmp_pat
     with patch(FETCH, return_value=original) as mock_fetch:
         result = ingest_match(3895158, events_dir, manifest_path)
 
-    mock_fetch.assert_called_once_with(3895158)
+    mock_fetch.assert_called_once_with(3895158, COMMIT)
     assert result["skipped"] is False
     assert (events_dir / "3895158.json").read_bytes() == original
 

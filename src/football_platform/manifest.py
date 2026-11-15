@@ -15,6 +15,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from football_platform.source import is_commit_sha
+
 
 def load_manifest(manifest_path: Path) -> list[dict]:
     """Load and validate the ingestion manifest."""
@@ -108,5 +110,19 @@ def parse_entry(content: bytes, match_id: int) -> dict:
     sha256 = entry.get("sha256")
     if not isinstance(sha256, str) or len(sha256) != 64:
         raise ValueError(f"Manifest for match {match_id} has an invalid sha256.")
+
+    # Optional: entries written before commit tracking lack these fields.
+    source_commit = entry.get("source_commit")
+    if source_commit is not None and not is_commit_sha(source_commit):
+        raise ValueError(f"Manifest for match {match_id} has an invalid source_commit.")
+
+    history = entry.get("history", [])
+    if not isinstance(history, list) or not all(
+        isinstance(version, dict)
+        and isinstance(version.get("sha256"), str)
+        and len(version["sha256"]) == 64
+        for version in history
+    ):
+        raise ValueError(f"Manifest for match {match_id} has an invalid history.")
 
     return entry

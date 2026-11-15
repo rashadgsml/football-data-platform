@@ -2,6 +2,10 @@
 
 import json
 
+# A syntactically valid upstream commit SHA used throughout the tests.
+COMMIT = "a" * 40
+OTHER_COMMIT = "b" * 40
+
 
 def make_event(index: int = 1, **overrides) -> dict:
     """Return a minimal event that satisfies ingestion validation."""

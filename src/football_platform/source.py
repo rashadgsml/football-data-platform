@@ -56,6 +56,10 @@ def events_url(commit: str, match_id: int) -> str:
     return data_url(commit, f"events/{match_id}.json")
 
 
+def lineups_url(commit: str, match_id: int) -> str:
+    return data_url(commit, f"lineups/{match_id}.json")
+
+
 def competitions_url(commit: str) -> str:
     return data_url(commit, "competitions.json")
 

@@ -11,6 +11,11 @@ from pathlib import Path
 
 from football_platform import bronze
 from football_platform.bronze import BronzeTarget
+from football_platform.reconcile import (
+    check_events_against_lineups,
+    check_events_against_match,
+    require_consistent,
+)
 from football_platform.source import (
     MAX_FETCH_ATTEMPTS,
     RETRY_BACKOFF_SECONDS,
@@ -138,7 +143,33 @@ def save_raw_events(match_id: int, content: bytes, output_dir: Path) -> dict:
     return {"match_id": match_id, **result}
 
 
-def events_target(match_id: int, output_dir: Path, manifest_path: Path) -> BronzeTarget:
+def _reconciling_validator(
+    match_id: int, match: dict | None, lineups: list[dict] | None
+) -> Callable[[bytes], dict]:
+    """Structural validation, plus cross-checks when reference data is given."""
+
+    def validate(content: bytes) -> dict:
+        events = validate_events(content)
+
+        problems = []
+        if match is not None:
+            problems += check_events_against_match(events, match)
+        if lineups is not None:
+            problems += check_events_against_lineups(events, lineups)
+        require_consistent(f"Events for match {match_id}", problems)
+
+        return {"event_count": len(events)}
+
+    return validate
+
+
+def events_target(
+    match_id: int,
+    output_dir: Path,
+    manifest_path: Path,
+    match: dict | None = None,
+    lineups: list[dict] | None = None,
+) -> BronzeTarget:
     return BronzeTarget(
         unit=str(match_id),
         label=f"match {match_id}",
@@ -151,7 +182,7 @@ def events_target(match_id: int, output_dir: Path, manifest_path: Path) -> Bronz
         unpinned_url=f"{UNPINNED_BASE_URL}/{match_id}.json",
         # Looked up at call time so tests can replace fetch_match_events.
         fetch=lambda commit: fetch_match_events(match_id, commit),
-        validate=_summarise,
+        validate=_reconciling_validator(match_id, match, lineups),
     )
 
 
@@ -162,8 +193,15 @@ def ingest_match(
     storage: S3Storage | None = None,
     source: SourceRef | None = None,
     refresh: bool = False,
+    match: dict | None = None,
+    lineups: list[dict] | None = None,
 ) -> dict:
-    """Ingest one match's events locally and optionally sync them to S3."""
+    """Ingest one match's events locally and optionally sync them to S3.
+
+    If the match record (from the matches dataset) and/or the match's parsed
+    lineups are given, the events must be consistent with them or nothing is
+    stored; without them only structural validation applies.
+    """
 
     if match_id <= 0:
         raise ValueError("Match ID must be a positive integer.")
@@ -172,7 +210,7 @@ def ingest_match(
         manifest_path = output_dir / "manifest.json"
 
     result = bronze.ingest_object(
-        events_target(match_id, output_dir, manifest_path),
+        events_target(match_id, output_dir, manifest_path, match, lineups),
         storage,
         source or SourceRef(),
         refresh,

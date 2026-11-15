@@ -109,3 +109,93 @@ def make_match(
 
 def matches_bytes(*matches: dict) -> bytes:
     return json.dumps(list(matches) or [make_match()]).encode("utf-8")
+
+
+# --- internally consistent match data (match + lineups + events) -----------
+
+HOME_ID, AWAY_ID = 904, 180
+HOME_PLAYERS = list(range(101, 113))  # 11 starters + 1 unused substitute (112)
+AWAY_PLAYERS = list(range(201, 213))
+
+
+def make_lineup_team(team_id: int, player_ids: list[int]) -> dict:
+    return {
+        "team_id": team_id,
+        "team_name": f"Team {team_id}",
+        "lineup": [{"player_id": pid, "player_name": f"Player {pid}"} for pid in player_ids],
+    }
+
+
+def make_lineups(
+    home_players: list[int] = HOME_PLAYERS, away_players: list[int] = AWAY_PLAYERS
+) -> list[dict]:
+    return [make_lineup_team(HOME_ID, home_players), make_lineup_team(AWAY_ID, away_players)]
+
+
+def lineups_bytes(lineups: list[dict] | None = None) -> bytes:
+    return json.dumps(lineups if lineups is not None else make_lineups()).encode("utf-8")
+
+
+def _starting_xi(index: int, team_id: int, players: list[int]) -> dict:
+    return make_event(
+        index,
+        type={"id": 35, "name": "Starting XI"},
+        team={"id": team_id, "name": f"Team {team_id}"},
+        tactics={"lineup": [{"player": {"id": pid, "name": f"Player {pid}"}} for pid in players[:11]]},
+    )
+
+
+def _shot(index: int, team_id: int, player_id: int, outcome: str, period: int = 1) -> dict:
+    return make_event(
+        index,
+        period=period,
+        type={"id": 16, "name": "Shot"},
+        team={"id": team_id, "name": f"Team {team_id}"},
+        player={"id": player_id, "name": f"Player {player_id}"},
+        shot={"outcome": {"id": 97, "name": outcome}},
+    )
+
+
+def make_match_events(
+    home_goals: int = 1,
+    away_goals: int = 1,
+    shootout_goals: int = 0,
+    own_goals_by_home: int = 0,
+) -> list[dict]:
+    """Events consistent with ``make_match(home_score=..., away_score=...)``.
+
+    ``own_goals_by_home`` own goals are recorded against the home team, so they
+    count for the away side; ``home_goals``/``away_goals`` are shots only.
+    """
+
+    events = [_starting_xi(1, HOME_ID, HOME_PLAYERS), _starting_xi(2, AWAY_ID, AWAY_PLAYERS)]
+    events.append(_shot(len(events) + 1, HOME_ID, 101, "Saved"))  # not a goal
+
+    for _ in range(home_goals):
+        events.append(_shot(len(events) + 1, HOME_ID, 101, "Goal"))
+    for _ in range(away_goals):
+        events.append(_shot(len(events) + 1, AWAY_ID, 201, "Goal"))
+    for _ in range(own_goals_by_home):
+        events.append(
+            make_event(
+                len(events) + 1,
+                type={"id": 20, "name": "Own Goal Against"},
+                team={"id": HOME_ID, "name": "Home"},
+                player={"id": 102, "name": "Player 102"},
+            )
+        )
+    for _ in range(shootout_goals):
+        events.append(_shot(len(events) + 1, HOME_ID, 101, "Goal", period=5))
+
+    return events
+
+
+def consistent_match(home_score: int = 1, away_score: int = 1, **overrides) -> dict:
+    return make_match(
+        3895158,
+        home_team_id=HOME_ID,
+        away_team_id=AWAY_ID,
+        home_score=home_score,
+        away_score=away_score,
+        **overrides,
+    )

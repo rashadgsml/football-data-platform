@@ -50,8 +50,17 @@ the match list of a season (`matches/<competition_id>/<season_id>.json`). They f
 pinning, write-once keys (`statsbomb/competitions/<sha256>.json`,
 `statsbomb/matches/<c>/<s>/<sha256>.json`) and manifests, and live locally under
 `data/raw/statsbomb/{competitions,matches}/`. A season can only be ingested if it is listed in
-competitions.json, and every match in a season file must belong to that season. Lineups and
-event-versus-metadata reconciliation are planned next.
+competitions.json, and every match in a season file must belong to that season. Lineups
+(`lineups/<match_id>.json`) are ingested the same way.
+
+**Reconciliation.** Event and lineup files carry no match id, so `reconcile.py` checks them
+against the match record before anything is stored; a failure rejects the file and writes
+nothing. Events must involve exactly the two teams of the match, have one Starting XI per team,
+and their goals (shots with outcome Goal, plus own goals credited to the opponent, excluding
+penalty-shootout kicks) must equal the final score. Lineups must be for the match's two teams, and
+every player in the events must be on their team's lineup. These rules were checked on real data
+before being enforced: the 5 stored matches, the 34 Bundesliga 2023/24 lineups, and 22 matches
+from other seasons (1970 to 2023, including three penalty shootouts).
 
 Limitations: the local cache holds only the current version (older versions live in S3); legacy
 objects at `statsbomb/events/<match_id>.json` are left in place after migration and can be

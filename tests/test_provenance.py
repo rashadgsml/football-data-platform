@@ -287,3 +287,51 @@ def test_unusable_run_id_is_rejected_before_any_work(tmp_path, upstream):
 
     assert upstream.fetched_commits == []
     assert not (tmp_path / "1.json").exists()
+
+
+# --- events reconciled against match metadata and lineups ------------------
+
+
+def test_events_matching_the_match_and_lineups_are_stored(tmp_path, monkeypatch):
+    from factories import consistent_match, make_lineups, make_match_events
+
+    content = json.dumps(make_match_events(2, 1)).encode()
+    monkeypatch.setattr(FETCH, lambda match_id, commit: content)
+    storage = FakeStorage()
+
+    result = ingest_match(
+        3895158, tmp_path, storage=storage,
+        match=consistent_match(2, 1), lineups=make_lineups(),
+    )
+
+    assert result["event_count"] == len(json.loads(content))
+    assert key_for(content) in storage.objects
+
+
+def test_events_that_contradict_the_match_are_rejected_before_any_write(tmp_path, monkeypatch):
+    from factories import consistent_match, make_match_events
+
+    content = json.dumps(make_match_events(3, 0)).encode()
+    monkeypatch.setattr(FETCH, lambda match_id, commit: content)
+    storage = FakeStorage()
+
+    with pytest.raises(ValueError, match="goals in events 3-0 differ from match score 1-1"):
+        ingest_match(3895158, tmp_path / "out", storage=storage, match=consistent_match(1, 1))
+
+    assert storage.uploads == []
+    assert not (tmp_path / "out").exists()
+
+
+def test_events_that_contradict_the_lineups_are_rejected(tmp_path, monkeypatch):
+    from factories import HOME_PLAYERS, make_lineups, make_match_events
+
+    content = json.dumps(make_match_events(1, 1)).encode()
+    monkeypatch.setattr(FETCH, lambda match_id, commit: content)
+    lineups = make_lineups(home_players=[p for p in HOME_PLAYERS if p != 101])
+
+    with pytest.raises(ValueError, match="player 101"):
+        ingest_match(3895158, tmp_path, lineups=lineups)
+
+
+def test_without_reference_data_only_structural_validation_applies(tmp_path, upstream):
+    assert ingest_match(3895158, tmp_path)["event_count"] == 1

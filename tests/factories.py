@@ -58,3 +58,54 @@ class FakeStorage:
 
     def download_bytes_if_exists(self, key: str) -> bytes | None:
         return self.objects.get(key)
+
+
+def make_competition(competition_id: int = 9, season_id: int = 281, **overrides) -> dict:
+    """A competitions.json row that satisfies validation."""
+
+    row = {
+        "competition_id": competition_id,
+        "season_id": season_id,
+        "competition_name": "1. Bundesliga",
+        "season_name": "2023/2024",
+        "country_name": "Germany",
+        "match_updated": "2024-09-28T20:46:38.893391",
+    }
+    row.update(overrides)
+    return row
+
+
+def competitions_bytes(*rows: dict) -> bytes:
+    return json.dumps(list(rows) or [make_competition()]).encode("utf-8")
+
+
+def make_match(
+    match_id: int = 3895158,
+    competition_id: int = 9,
+    season_id: int = 281,
+    home_team_id: int = 904,
+    away_team_id: int = 180,
+    home_score: int = 1,
+    away_score: int = 1,
+    **overrides,
+) -> dict:
+    """A matches/<c>/<s>.json record that satisfies validation."""
+
+    match = {
+        "match_id": match_id,
+        "match_date": "2023-12-03",
+        "match_status": "available",
+        "last_updated": "2024-07-29T12:45:28.152104",
+        "home_score": home_score,
+        "away_score": away_score,
+        "home_team": {"home_team_id": home_team_id, "home_team_name": "Home"},
+        "away_team": {"away_team_id": away_team_id, "away_team_name": "Away"},
+        "competition": {"competition_id": competition_id, "competition_name": "1. Bundesliga"},
+        "season": {"season_id": season_id, "season_name": "2023/2024"},
+    }
+    match.update(overrides)
+    return match
+
+
+def matches_bytes(*matches: dict) -> bytes:
+    return json.dumps(list(matches) or [make_match()]).encode("utf-8")

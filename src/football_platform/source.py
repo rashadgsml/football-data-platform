@@ -18,7 +18,8 @@ RAW_BASE_URL = "https://raw.githubusercontent.com/statsbomb/open-data"
 LATEST_COMMIT_URL = "https://api.github.com/repos/statsbomb/open-data/commits/master"
 
 # Used only to describe data ingested before commits were recorded.
-UNPINNED_BASE_URL = f"{RAW_BASE_URL}/master/data/events"
+UNPINNED_DATA_URL = f"{RAW_BASE_URL}/master/data"
+UNPINNED_BASE_URL = f"{UNPINNED_DATA_URL}/events"
 
 FETCH_TIMEOUT_SECONDS = 30
 MAX_FETCH_ATTEMPTS = 3
@@ -40,13 +41,29 @@ def is_commit_sha(value: object) -> bool:
     return isinstance(value, str) and COMMIT_PATTERN.fullmatch(value) is not None
 
 
-def events_url(commit: str, match_id: int) -> str:
-    """URL of a match's event file at a specific upstream commit."""
+def data_url(commit: str, path: str) -> str:
+    """URL of a file under the repository's ``data/`` directory at a commit."""
 
     if not is_commit_sha(commit):
         raise ValueError("commit must be a 40-character lowercase hex SHA.")
 
-    return f"{RAW_BASE_URL}/{commit}/data/events/{match_id}.json"
+    return f"{RAW_BASE_URL}/{commit}/data/{path}"
+
+
+def events_url(commit: str, match_id: int) -> str:
+    """URL of a match's event file at a specific upstream commit."""
+
+    return data_url(commit, f"events/{match_id}.json")
+
+
+def competitions_url(commit: str) -> str:
+    return data_url(commit, "competitions.json")
+
+
+def matches_url(commit: str, competition_id: int, season_id: int) -> str:
+    """URL of the match list for one competition season."""
+
+    return data_url(commit, f"matches/{competition_id}/{season_id}.json")
 
 
 def get_with_retries(

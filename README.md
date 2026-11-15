@@ -45,6 +45,14 @@ attribution requirements apply.
   status (`downloaded` / `cached`), and, for a failed run, the failing match and error. A failure
   still stops the batch and is re-raised.
 
+**Datasets.** Besides events, Bronze ingests `competitions.json` (every competition season) and
+the match list of a season (`matches/<competition_id>/<season_id>.json`). They follow the same
+pinning, write-once keys (`statsbomb/competitions/<sha256>.json`,
+`statsbomb/matches/<c>/<s>/<sha256>.json`) and manifests, and live locally under
+`data/raw/statsbomb/{competitions,matches}/`. A season can only be ingested if it is listed in
+competitions.json, and every match in a season file must belong to that season. Lineups and
+event-versus-metadata reconciliation are planned next.
+
 Limitations: the local cache holds only the current version (older versions live in S3); legacy
 objects at `statsbomb/events/<match_id>.json` are left in place after migration and can be
 deleted manually once you are sure they are no longer needed.

@@ -62,6 +62,13 @@ every player in the events must be on their team's lineup. These rules were chec
 before being enforced: the 5 stored matches, the 34 Bundesliga 2023/24 lineups, and 22 matches
 from other seasons (1970 to 2023, including three penalty shootouts).
 
+**Current coverage.** Bundesliga 2023/24 (competition 9, season 281) is fully ingested from
+StatsBomb commit `4b73468`: 34 matches, 137,765 events and 1,353 lineup entries, about 115 MB
+locally. Every match was reconciled against its match record and lineups, and the stored objects
+were re-verified independently from S3 (hash, key and reconciliation). The events of the first five
+matches (3895107, 3895158, 3895292, 3895320, 3895340) predate commit tracking, so their
+`source_commit` is `null`.
+
 Limitations: the local cache holds only the current version (older versions live in S3); legacy
 objects at `statsbomb/events/<match_id>.json` are left in place after migration and can be
 deleted manually once you are sure they are no longer needed.

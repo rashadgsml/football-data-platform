@@ -49,7 +49,7 @@ attribution requirements apply.
 the match list of a season (`matches/<competition_id>/<season_id>.json`). They follow the same
 pinning, write-once keys (`statsbomb/competitions/<sha256>.json`,
 `statsbomb/matches/<c>/<s>/<sha256>.json`) and manifests, and live locally under
-`data/raw/statsbomb/{competitions,matches}/`. A season can only be ingested if it is listed in
+`data/raw/statsbomb/{competitions,matches,lineups}/`. A season can only be ingested if it is listed in
 competitions.json, and every match in a season file must belong to that season. Lineups
 (`lineups/<match_id>.json`) are ingested the same way.
 
@@ -66,7 +66,21 @@ Limitations: the local cache holds only the current version (older versions live
 objects at `statsbomb/events/<match_id>.json` are left in place after migration and can be
 deleted manually once you are sure they are no longer needed.
 
-Five Bundesliga 2023/24 matches are ingested by `scripts/ingest_sample_matches.py`.
+**Season runs.** `scripts/ingest_season.py --competition <id> --season <id>` is driven by the
+match list: competitions, the season's matches, then lineups and events for each match whose
+`match_status` is `available` (others are skipped and reported). The first failure stops the run.
+`--match-id` (repeatable) and `--limit` restrict which matches are processed.
+
+**Run record** (schema version 2) at `statsbomb/runs/<run_id>.json`: scope, source commit, the
+outcome of each dataset and of each match's lineups and events, skipped matches, stale matches,
+and for a failed run the dataset and unit that failed with the error. Lineup and event manifests
+also record `match_last_updated`, the match's upstream `last_updated` when the file was
+downloaded. A match whose metadata has since changed upstream is reported as stale; it is never
+refreshed automatically, use `--refresh`. Entries ingested before this field existed are not
+backfilled, so they are never reported stale until refreshed.
+
+Progress is logged with the standard `logging` module (ids, keys and outcomes only, no
+endpoints or credentials).
 
 ## Local setup
 
@@ -115,8 +129,9 @@ Both are reachable from the local machine only.
 
 ```bash
 python scripts/s3_smoke_test.py          # check the S3 connection (writes under test/)
-python scripts/ingest_sample_matches.py  # ingest the five sample matches
-python scripts/ingest_sample_matches.py --refresh  # re-download and record changes
+python scripts/ingest_season.py --competition 9 --season 281 --limit 5   # Bundesliga 2023/24, first 5 matches
+python scripts/ingest_season.py --competition 9 --season 281              # the whole season
+python scripts/ingest_season.py --competition 9 --season 281 --refresh    # re-download and record changes
 ```
 
 ## Development
@@ -135,7 +150,7 @@ The tests in `tests/` run offline. They mock the network and S3 and never touch 
 src/football_platform/   bronze (shared ingestion mechanics), pipeline (runs), source (pinned
                          upstream access), manifest, runs, storage, config, checksums
 src/football_platform/datasets/   explicit per-dataset rules (events today)
-scripts/                 manual scripts (sample ingestion, S3 smoke test)
+scripts/                 manual scripts (season ingestion CLI, S3 smoke test)
 tests/                   offline pytest suite
 docker-compose.yml       local SeaweedFS
 ```

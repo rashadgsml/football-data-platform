@@ -190,9 +190,11 @@ def make_match_events(
     return events
 
 
-def consistent_match(home_score: int = 1, away_score: int = 1, **overrides) -> dict:
+def consistent_match(
+    home_score: int = 1, away_score: int = 1, match_id: int = 3895158, **overrides
+) -> dict:
     return make_match(
-        3895158,
+        match_id,
         home_team_id=HOME_ID,
         away_team_id=AWAY_ID,
         home_score=home_score,

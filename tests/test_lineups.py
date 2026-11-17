@@ -133,3 +133,49 @@ def test_rerun_is_idempotent(tmp_path, upstream):
     assert upstream.downloads == 1 and result["skipped"] is True
     assert storage.uploads == uploads
     assert (tmp_path / "manifest.json").read_text() == manifest
+
+
+# --- provenance recorded at download time ----------------------------------
+
+
+def test_the_match_last_updated_seen_at_download_is_recorded(tmp_path, upstream):
+    storage = FakeStorage()
+
+    result = ingest_lineups(MATCH, tmp_path, storage=storage)
+
+    assert json.loads(storage.objects[MANIFEST_KEY])["match_last_updated"] == MATCH["last_updated"]
+    assert result["extra"] == {"match_last_updated": MATCH["last_updated"]}
+
+
+def test_a_cached_run_keeps_the_value_from_download_time(tmp_path, upstream):
+    storage = FakeStorage()
+    ingest_lineups(MATCH, tmp_path, storage=storage)
+    newer = {**MATCH, "last_updated": "2030-01-01T00:00:00"}
+
+    result = ingest_lineups(newer, tmp_path, storage=storage)
+
+    assert result["skipped"] is True
+    assert result["extra"]["match_last_updated"] == MATCH["last_updated"]
+
+
+def test_refresh_records_the_current_value(tmp_path, upstream):
+    storage = FakeStorage()
+    ingest_lineups(MATCH, tmp_path, storage=storage)
+    newer = {**MATCH, "last_updated": "2030-01-01T00:00:00"}
+
+    ingest_lineups(newer, tmp_path, storage=storage, refresh=True)
+
+    assert json.loads(storage.objects[MANIFEST_KEY])["match_last_updated"] == "2030-01-01T00:00:00"
+
+
+def test_entries_without_the_field_are_never_backfilled(tmp_path, upstream):
+    ingest_lineups(MATCH, tmp_path)
+    manifest_path = tmp_path / "manifest.json"
+    entries = json.loads(manifest_path.read_text())
+    del entries[0]["match_last_updated"]
+    manifest_path.write_text(json.dumps(entries))
+
+    result = ingest_lineups({**MATCH, "last_updated": "2030-01-01T00:00:00"}, tmp_path)
+
+    assert result["extra"] == {"match_last_updated": None}
+    assert "match_last_updated" not in json.loads(manifest_path.read_text())[0]

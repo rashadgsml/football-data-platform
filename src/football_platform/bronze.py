@@ -9,8 +9,9 @@ lives, how to download it, and how to validate it. The dataset modules under
 runs the common steps.
 """
 
+import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -24,6 +25,8 @@ from football_platform.manifest import (
 )
 from football_platform.source import SourceRef
 from football_platform.storage import S3Storage
+
+logger = logging.getLogger(__name__)
 
 
 def utc_now() -> str:
@@ -39,6 +42,11 @@ class BronzeTarget:
     ``validate`` must raise on invalid content and otherwise return summary
     fields (for example ``{"event_count": 3866}``) that are copied into the
     result and the manifest entry.
+
+    ``extra`` holds provenance recorded at download time, such as the match's
+    upstream ``last_updated``. It is written only when content is downloaded
+    and carried over unchanged otherwise, so a later run can tell that the
+    metadata has moved on since the stored copy was fetched.
     """
 
     unit: str  # identity within the dataset, e.g. "3895158"
@@ -52,6 +60,7 @@ class BronzeTarget:
     unpinned_url: str  # describes data ingested before commits were tracked
     fetch: Callable[[str], bytes]  # upstream commit -> content
     validate: Callable[[bytes], dict]
+    extra: dict = field(default_factory=dict)
 
 
 def save_raw(content: bytes, path: Path, validate: Callable[[bytes], dict]) -> dict:
@@ -196,6 +205,13 @@ def build_entry(
         "history": history,
     }
 
+    if downloaded:
+        entry.update(target.extra)
+    elif previous:
+        # Never backfilled: for older entries we cannot know what was current
+        # when the content was downloaded.
+        entry.update({name: previous[name] for name in target.extra if name in previous})
+
     if "s3_key" in result:
         entry["s3_key"] = result["s3_key"]
         entry["s3_uri"] = result["s3_uri"]
@@ -229,7 +245,8 @@ def ingest_object(
 
     Returns the summary fields plus ``file_path``, ``sha256``, ``skipped``
     (True when nothing was downloaded), ``s3_uploaded`` and ``source_commit``,
-    and ``s3_key`` / ``s3_uri`` when S3 is configured.
+    ``extra`` (the recorded provenance fields), and ``s3_key`` / ``s3_uri``
+    when S3 is configured.
     """
 
     now = utc_now()
@@ -283,4 +300,13 @@ def ingest_object(
     result["skipped"] = commit is None
     result["s3_uploaded"] = uploaded
     result["source_commit"] = entry["source_commit"]
+    result["extra"] = {name: entry.get(name) for name in target.extra}
+
+    logger.info(
+        "%s %s: %s%s",
+        target.identity.get("dataset", "events"),
+        target.unit,
+        "cached" if commit is None else "downloaded",
+        ", uploaded to S3" if uploaded else "",
+    )
     return result

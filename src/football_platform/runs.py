@@ -28,41 +28,60 @@ def run_record_key(run_id: str) -> str:
     return f"{RUN_PREFIX}/{run_id}.json"
 
 
+SCHEMA_VERSION = 2
+
+
+def outcome(result: dict) -> dict:
+    """Summarise what happened to one stored object in a run."""
+
+    return {
+        "status": "cached" if result["skipped"] else "downloaded",
+        "records": result.get("event_count", result.get("record_count")),
+        "sha256": result["sha256"],
+        "s3_key": result.get("s3_key"),
+        "s3_uploaded": result["s3_uploaded"],
+        **result.get("extra", {}),
+    }
+
+
 def build_run_record(
     run_id: str,
     started_at: str,
     finished_at: str,
     status: str,
     source_commit: str | None,
-    results: list[dict],
-    failed_match_id: int | None = None,
-    error: str | None = None,
+    scope: dict | None = None,
+    datasets: dict | None = None,
+    matches: list[dict] | None = None,
+    skipped_matches: list[dict] | None = None,
+    stale_match_ids: list[int] | None = None,
+    failure: dict | None = None,
 ) -> dict:
-    """Describe a run. ``source_commit`` is None if nothing was downloaded."""
+    """Describe a run.
+
+    ``source_commit`` is None if nothing was downloaded. ``datasets`` holds the
+    outcome of season-level files (competitions, matches); each entry of
+    ``matches`` holds the outcomes of that match's lineups and events.
+    ``failure`` names the dataset and unit that raised, for a failed run.
+    """
 
     record = {
+        "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
         "status": status,
         "started_at": started_at,
         "finished_at": finished_at,
         "source": "StatsBomb Open Data",
         "source_commit": source_commit,
-        "matches": [
-            {
-                "match_id": result["match_id"],
-                "status": "cached" if result["skipped"] else "downloaded",
-                "event_count": result["event_count"],
-                "sha256": result["sha256"],
-                "s3_key": result.get("s3_key"),
-                "s3_uploaded": result["s3_uploaded"],
-            }
-            for result in results
-        ],
+        "scope": scope,
+        "datasets": datasets or {},
+        "matches": matches or [],
+        "skipped_matches": skipped_matches or [],
+        "stale_match_ids": stale_match_ids or [],
     }
 
     if status == "failed":
-        record["failed_match_id"] = failed_match_id
-        record["error"] = error
+        record["failure"] = failure
 
     return record
 

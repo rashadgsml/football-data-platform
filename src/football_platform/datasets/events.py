@@ -183,6 +183,7 @@ def events_target(
         # Looked up at call time so tests can replace fetch_match_events.
         fetch=lambda commit: fetch_match_events(match_id, commit),
         validate=_reconciling_validator(match_id, match, lineups),
+        extra={"match_last_updated": match["last_updated"]} if match else {},
     )
 
 

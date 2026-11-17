@@ -118,6 +118,7 @@ def lineups_target(
         unpinned_url=f"{UNPINNED_DATA_URL}/lineups/{match_id}.json",
         fetch=lambda commit: fetch_lineups(match_id, commit),
         validate=validate,
+        extra={"match_last_updated": match["last_updated"]},
     )
 
 

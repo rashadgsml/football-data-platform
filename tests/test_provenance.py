@@ -224,7 +224,8 @@ def test_successful_run_writes_a_run_record(tmp_path, upstream):
     assert record["status"] == "succeeded"
     assert record["source_commit"] == COMMIT
     assert [m["match_id"] for m in record["matches"]] == [1, 2]
-    assert {m["status"] for m in record["matches"]} == {"downloaded"}
+    assert {m["events"]["status"] for m in record["matches"]} == {"downloaded"}
+    assert record["schema_version"] == 2
 
 
 def test_fully_cached_run_records_no_source_commit(tmp_path, upstream):
@@ -235,7 +236,7 @@ def test_fully_cached_run_records_no_source_commit(tmp_path, upstream):
 
     record = stored_runs(storage)["statsbomb/runs/run-2.json"]
     assert record["source_commit"] is None
-    assert record["matches"][0]["status"] == "cached"
+    assert record["matches"][0]["events"]["status"] == "cached"
 
 
 def test_failed_run_is_recorded_and_the_error_is_still_raised(tmp_path, monkeypatch):
@@ -252,8 +253,9 @@ def test_failed_run_is_recorded_and_the_error_is_still_raised(tmp_path, monkeypa
 
     record = stored_runs(storage)["statsbomb/runs/run-1.json"]
     assert record["status"] == "failed"
-    assert record["failed_match_id"] == 2
-    assert "source unavailable" in record["error"]
+    assert record["failure"]["dataset"] == "events"
+    assert record["failure"]["unit"] == "2"
+    assert "source unavailable" in record["failure"]["error"]
     assert [m["match_id"] for m in record["matches"]] == [1]  # match 3 never started
 
 

@@ -99,6 +99,23 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
+### Silver prerequisites (PySpark)
+
+The Silver layer needs a JDK (17 or 21) and the optional `silver` extra; Bronze does not.
+
+```bash
+brew install openjdk@21
+pip install -e ".[silver,dev]"
+export JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home"
+```
+
+PySpark 4.1 bundles Hadoop 3.4.2. Reading from SeaweedFS uses the S3A connector
+(`hadoop-aws:3.4.2` with AWS SDK bundle `2.29.52`), which Spark downloads on first start (about
+630 MB, cached under `~/.ivy2.5.2`; the first start takes about two minutes, later ones a few
+seconds). Credentials are passed to the JVM as environment variables, never in Spark
+configuration, which can be logged. Path-style access and plain HTTP are required for the local
+SeaweedFS endpoint.
+
 ### Configuration and secrets
 
 Secrets are never committed. Create your own local files from the templates:
